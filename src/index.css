@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Prevent image downloading and saving */
+img {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  pointer-events: none;
+  -webkit-touch-callout: none;
+}
+
+/* Allow pointer events for interactive images */
+img.interactive {
+  pointer-events: auto;
+  -webkit-touch-callout: none;
+}
+
+/* Disable long-press context menu on mobile */
+* {
+  -webkit-touch-callout: none;
+}
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 220 20% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 15%;
+
+    --primary: 201 79% 32%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 201 30% 92%;
+    --secondary-foreground: 201 79% 25%;
+
+    --muted: 201 30% 97%;
+    --muted-foreground: 201 20% 45%;
+
+    --accent: 201 70% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 201 20% 85%;
+    --input: 201 20% 85%;
+    --ring: 201 79% 32%;
+
+    --radius: 0.5rem;
+
+    /* Blue section colors */
+    --section-blue: 201 79% 32%;
+    --section-blue-foreground: 0 0% 100%;
+
+    --sidebar-background: 201 30% 95%;
+    --sidebar-foreground: 201 20% 30%;
+    --sidebar-primary: 201 79% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 201 25% 90%;
+    --sidebar-accent-foreground: 201 79% 20%;
+    --sidebar-border: 201 20% 88%;
+    --sidebar-ring: 201 79% 32%;
+  }
+
+  .dark {
+    --background: 220 20% 10%;
+    --foreground: 45 20% 95%;
+
+    --card: 220 20% 12%;
+    --card-foreground: 45 20% 95%;
+
+    --popover: 220 20% 12%;
+    --popover-foreground: 45 20% 95%;
+
+    --primary: 201 79% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 201 20% 18%;
+    --secondary-foreground: 201 30% 95%;
+
+    --muted: 201 20% 18%;
+    --muted-foreground: 201 15% 60%;
+
+    --accent: 201 70% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 201 20% 20%;
+    --input: 201 20% 20%;
+    --ring: 201 79% 45%;
+
+    /* Blue section colors */
+    --section-blue: 201 79% 32%;
+    --section-blue-foreground: 0 0% 100%;
+
+    --sidebar-background: 201 25% 8%;
+    --sidebar-foreground: 201 20% 90%;
+    --sidebar-primary: 201 79% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 201 20% 15%;
+    --sidebar-accent-foreground: 201 25% 95%;
+    --sidebar-border: 201 20% 18%;
+    --sidebar-ring: 201 79% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-section-blue text-section-blue-foreground;
+  }
+}
+
+/* Hero title animation */
+@keyframes title-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+    letter-spacing: 0.1em;
+  }
+  50% {
+    opacity: 0.8;
+    letter-spacing: 0.05em;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    letter-spacing: normal;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 1s ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes fade-in {
+  to {
+    opacity: 1;
+  }
+}
