@@ -12,6 +12,10 @@ import babyBlueBalloons from "@/assets/gallery/baby-blue-balloons.jpeg";
 import kidsPuzzle from "@/assets/gallery/kids-puzzle.jpeg";
 import boyWhiteOutfit from "@/assets/gallery/boy-white-outfit.jpeg";
 import smilingToddler from "@/assets/gallery/smiling-toddler.jpeg";
+import boyArabOutfit from "@/assets/gallery/boy-arab-outfit.jpeg";
+import babyGreyHoodieNew from "@/assets/gallery/baby-grey-hoodie-new.jpeg";
+import boyWhiteAgbadaSmiling from "@/assets/gallery/boy-white-agbada-smiling.jpeg";
+import boyBlueCapLadder from "@/assets/gallery/boy-blue-cap-ladder.jpeg";
 
 const galleryImages = [
   { src: girlAfricanDress, alt: "Beautiful girl in African print dress" },
@@ -19,6 +23,10 @@ const galleryImages = [
   { src: boyWhiteOutfit, alt: "Stylish boy in white outfit" },
   { src: smilingToddler, alt: "Happy smiling toddler" },
   { src: happyBoyBooks, alt: "Excited boy with books" },
+  { src: boyArabOutfit, alt: "Cute boy in traditional Arab outfit" },
+  { src: babyGreyHoodieNew, alt: "Adorable baby in grey hoodie" },
+  { src: boyWhiteAgbadaSmiling, alt: "Smiling boy in white agbada" },
+  { src: boyBlueCapLadder, alt: "Boy with blue cap by ladder" },
 ];
 
 const activityImages = [
