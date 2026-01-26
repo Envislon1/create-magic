@@ -4,7 +4,7 @@ import { CountdownTimer, useContestStartDate } from "@/components/CountdownTimer
 import { Skeleton } from "@/components/ui/skeleton";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious, CarouselApi } from "@/components/ui/carousel";
 import { Trophy, Medal, Award } from "lucide-react";
-import heroImage from "@/assets/hero-family.webp";
+import heroImage from "@/assets/kids-playing-blocks.jpg";
 
 // Gallery images for carousel
 import girlAfricanDress from "@/assets/gallery/girl-african-dress.jpeg";
@@ -133,8 +133,8 @@ const Home = () => {
   return (
     <div className="min-h-screen">
       {/* Hero Banner */}
-      <section className="relative w-full h-[50vh] md:h-[60vh] overflow-hidden bg-section-blue">
-        {!heroLoaded && !heroError && <Skeleton className="absolute inset-0 w-full h-full bg-section-blue" />}
+      <section className="relative w-full h-[50vh] md:h-[60vh] overflow-hidden bg-black">
+        {!heroLoaded && !heroError && <Skeleton className="absolute inset-0 w-full h-full bg-black" />}
         {heroError && (
           <div className="absolute inset-0 w-full h-full bg-section-blue flex items-center justify-center">
             <span className="text-muted-foreground">Loading image...</span>
