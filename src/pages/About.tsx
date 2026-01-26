@@ -4,7 +4,7 @@ import { Star, Heart, Trophy, Users } from "lucide-react";
 // Gallery images
 import girlAfricanDress from "@/assets/gallery/girl-african-dress.jpeg";
 import boyTraditional from "@/assets/gallery/boy-traditional.jpeg";
-import kidsPlayingBlocks from "@/assets/gallery/kids-playing-blocks.webp";
+import heroFamily from "@/assets/hero-family.webp";
 import boyReading from "@/assets/gallery/boy-reading.jpeg";
 import siblingsPlaying from "@/assets/gallery/siblings-playing.jpeg";
 import happyBoyBooks from "@/assets/gallery/happy-boy-books.jpeg";
@@ -22,7 +22,7 @@ const galleryImages = [
 ];
 
 const activityImages = [
-  { src: kidsPlayingBlocks, alt: "Kids playing with building blocks" },
+  { src: heroFamily, alt: "Happy family together" },
   { src: siblingsPlaying, alt: "Siblings playing together" },
   { src: kidsPuzzle, alt: "Children solving puzzles" },
   { src: boyReading, alt: "Boy enjoying story time" },
