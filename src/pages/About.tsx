@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Star, Heart, Trophy, Users } from "lucide-react";
+import { Star, Heart, Trophy, Users, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 // Gallery images
 import girlAfricanDress from "@/assets/gallery/girl-african-dress.jpeg";
@@ -35,6 +37,43 @@ const activityImages = [
   { src: kidsPuzzle, alt: "Children solving puzzles" },
   { src: boyReading, alt: "Boy enjoying story time" },
 ];
+
+const GalleryCollapsible = () => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className="w-full group">
+        <div className="flex items-center justify-center gap-3 cursor-pointer py-4 px-6 bg-white/10 backdrop-blur rounded-xl border border-white/20 hover:bg-white/20 transition-colors">
+          <h2 className="text-2xl md:text-3xl font-bold text-white">
+            Our Little Stars Gallery
+          </h2>
+          <ChevronDown 
+            className={`w-6 h-6 text-white transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} 
+          />
+        </div>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {galleryImages.map((image, index) => (
+            <div
+              key={index}
+              className="aspect-square overflow-hidden rounded-xl shadow-lg group bg-white/10"
+            >
+              <img
+                src={image.src}
+                alt={image.alt}
+                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                onContextMenu={(e) => e.preventDefault()}
+                draggable={false}
+              />
+            </div>
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
 
 const About = () => {
   return (
@@ -74,25 +113,7 @@ const About = () => {
       {/* Star Gallery Section */}
       <section className="py-12 px-4 bg-section-blue">
         <div className="max-w-5xl mx-auto">
-          <h2 className="text-2xl md:text-3xl font-bold text-center mb-8 text-white">
-            Our Little Stars Gallery
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {galleryImages.map((image, index) => (
-              <div
-                key={index}
-                className="aspect-square overflow-hidden rounded-xl shadow-lg group bg-white/10"
-              >
-                <img
-                  src={image.src}
-                  alt={image.alt}
-                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  onContextMenu={(e) => e.preventDefault()}
-                  draggable={false}
-                />
-              </div>
-            ))}
-          </div>
+          <GalleryCollapsible />
         </div>
       </section>
 
