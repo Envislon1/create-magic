@@ -3,6 +3,8 @@ import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { VoteSection } from "@/components/VoteSection";
 import { CountdownTimer } from "@/components/CountdownTimer";
+import { EditProfileModal } from "@/components/EditProfileModal";
+import { Footer } from "@/components/Footer";
 
 interface Contestant {
   id: string;
@@ -88,19 +90,22 @@ export default function ContestantProfile() {
           </Link>
           
           <div className="mt-4">
-            {contestant.photo_url ? (
-              <img
-                src={contestant.photo_url}
-                alt={contestant.full_name}
-                className="w-36 h-36 rounded-full object-cover mx-auto mb-4 border-4 border-white/50 shadow-xl"
-                onContextMenu={(e) => e.preventDefault()}
-                draggable={false}
-              />
-            ) : (
-              <div className="w-36 h-36 rounded-full bg-white/20 mx-auto mb-4 flex items-center justify-center text-5xl border-4 border-white/50 shadow-xl">
-                👶
-              </div>
-            )}
+            <div className="relative inline-block">
+              {contestant.photo_url ? (
+                <img
+                  src={contestant.photo_url}
+                  alt={contestant.full_name}
+                  className="w-36 h-36 rounded-full object-cover mx-auto mb-4 border-4 border-white/50 shadow-xl"
+                  onContextMenu={(e) => e.preventDefault()}
+                  draggable={false}
+                />
+              ) : (
+                <div className="w-36 h-36 rounded-full bg-white/20 mx-auto mb-4 flex items-center justify-center text-5xl border-4 border-white/50 shadow-xl">
+                  👶
+                </div>
+              )}
+              <EditProfileModal contestant={contestant} onUpdate={fetchContestant} />
+            </div>
 
             <h1 className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg">{contestant.full_name}</h1>
             <p className="text-white/90 text-lg pb-4">
@@ -165,6 +170,8 @@ export default function ContestantProfile() {
           onVoteSuccess={fetchContestant}
         />
       </div>
+      
+      <Footer />
     </div>
   );
 }
