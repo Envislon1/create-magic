@@ -1,7 +1,0 @@
-project_id = "gvogmfjpfndrixkpdodd"
-
-[functions.verify-payment]
-verify_jwt = false
-
-[functions.apply-vote-boost]
-verify_jwt = false
