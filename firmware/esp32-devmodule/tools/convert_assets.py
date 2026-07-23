@@ -98,17 +98,7 @@ def convert_one(src: Path) -> Path:
     print(f"  {rel}  ({img.size[0]}x{img.size[1]}, cf={cf})")
     return dst
 
-def convert_one(src: Path) -> Path:
-    rel = src.relative_to(SRC_ROOT).with_suffix(".bin")
-    dst = DST_ROOT / rel
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    img = Image.open(src)
-    cf, payload = encode_image(img)
-    stride = img.size[0] * (2 if cf == CF_RGB565 else 3)
-    header = lvgl_header(cf, img.size[0], img.size[1], stride, len(payload))
-    dst.write_bytes(header + payload)
-    print(f"  {rel}  ({img.size[0]}x{img.size[1]}, cf={cf})")
-    return dst
+
 
 def main() -> int:
     if not SRC_ROOT.exists():
