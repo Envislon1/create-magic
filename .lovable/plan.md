@@ -1,74 +1,92 @@
-# Mind Buddy — voice, wake word, radio, transcription, alerts
 
-Six items, scoped to firmware, local server, cloud server, and web app.
+# SD-Card–backed UI for the ESP32 DevModule
 
-## 1. Nigerian-sounding local TTS
+Goal: stop building every screen from scratch in ESP32 DRAM. Instead ship a themed UI that mirrors `MindBuddy TFT Screen Pages` and load all heavy visuals (backgrounds, icons, avatars, tones) from a FAT-formatted 8 GB SD card plugged into the TFT module's built-in slot.
 
-Piper does not ship a first-party Nigerian English voice. I'll wire the local server to a community Nigerian-accent voice and fall back gracefully.
+Only the `firmware/esp32-devmodule/` build is touched. LilyGo firmware, Pi code, and the web app are unchanged.
 
-- Add `firmware/local_server/voices/` with an auto-download step in `scripts/postinstall` for one of these (in priority order, first that downloads OK wins):
-  1. `en_NG-naija-medium` (community Piper voice, HF mirror)
-  2. `en_GB-cori-medium` (closest African-English-friendly fallback)
-- New env var `MB_TTS_VOICE` (default `en_NG-naija-medium`) consumed by `firmware/app_local.py` Piper init.
-- README: how to drop a custom `.onnx`/`.json` pair into `voices/` to override.
+## What ships
 
-If you'd rather pay for the noticeably better ElevenLabs Nigerian voice instead, say the word and I'll add it as the online path with this Piper voice as offline fallback.
+### 1. SD card asset layout (copy this to the card root)
 
-## 2. Always-on "Buddy" wake word + 2-minute conversation window
+Created as `firmware/esp32-devmodule/sdcard/` in the repo so you can drag-drop it onto the card:
 
-Use **ESP-SR / WakeNet** (Espressif's on-device keyword spotter, native to ESP32-S3, free, no cloud) with a custom "hi mind buddy" model. Picovoice Porcupine needs a paid AccessKey per device — ESP-SR avoids that.
+```text
+/mindbuddy/
+├── theme.json                  # colors, fonts, layout offsets (mirrors Figma tokens)
+├── backgrounds/
+│   ├── splash.bin              # 240x320 RGB565 LVGL binary
+│   ├── home.bin
+│   ├── chat.bin
+│   ├── modes.bin
+│   ├── meds.bin
+│   ├── music.bin
+│   ├── dial.bin
+│   ├── sms.bin
+│   ├── settings.bin
+│   └── wifi.bin
+├── icons/
+│   ├── nav/                    # 32x32 bottom-nav (home, brain, chat, music, bell, sos, settings)
+│   ├── actions/                # 48x48 (talk, mic, send, back, plus, check, sliders)
+│   ├── media/                  # play, pause, next, prev, volume
+│   ├── phone/                  # call, incoming, missed, outgoing, dial-pad glyphs
+│   ├── status/                 # wifi, battery, clock, signal
+│   └── moods/                  # heart, shield, zap, moon, sun, wind (support-mode tiles)
+├── avatars/
+│   ├── buddy_idle.bin
+│   ├── buddy_listen.bin
+│   ├── buddy_think.bin
+│   └── buddy_speak.bin
+├── fonts/
+│   ├── figtree_16.bin          # LVGL binary font (converted from Figtree)
+│   ├── figtree_20.bin
+│   └── dmmono_12.bin
+├── sounds/                     # played via the Pi; ESP32 just references paths
+│   ├── alarm.wav
+│   ├── medication.wav
+│   ├── incoming_call.wav
+│   ├── message.wav
+│   └── sos.wav
+└── README.txt                  # tells the user how to (re)generate assets
+```
 
-Firmware (`Healthco2Serial_S3_WakeWord.ino`):
-- Replace the current Talk-button start with a continuous ESP-SR detection loop running on core 0.
-- State machine:
-  - `IDLE` → mic feeds ESP-SR only. Detection triggers `ACTIVE`.
-  - `ACTIVE` → `recordPCM()` (already planned) captures utterance via VAD, uploads to `/chat`, plays reply, restarts recording immediately for follow-up.
-  - Every reply resets a `lastInteractionMs` timer. If `millis() - lastInteractionMs > 120000` → back to `IDLE` and require wake word again.
-- Talk button repurposed: short-press = manual wake (skip wake word once); long-press = force back to `IDLE`.
-- OLED shows a small mic icon when armed (wake-word listening) vs. a filled mic when in active conversation, plus a thin countdown bar for the 2-min window.
-- README updated with the ESP-SR install line (`idf.py add-dependency "espressif/esp-sr"`) and the wake-word model selection (`hi_mind_buddy`).
+A `tools/convert_assets.py` helper (Pillow + LVGL image converter CLI) generates every `.bin` from source PNGs under `firmware/esp32-devmodule/sdcard-src/`. Placeholder PNGs (solid theme-colored panels + labeled icon tiles) ship in that source folder so the card is usable immediately; you can replace the PNGs with polished art and re-run the script.
 
-If the user prefers cloud wake-word detection instead, I'd stream audio to the local server and run openWakeWord there — say so and I'll switch.
+### 2. Firmware changes (`firmware/esp32-devmodule/`)
 
-## 3. Radio: just play, then re-tune by voice
+- `platformio.ini`
+  - Add `SD` and `FS` libs (bundled with the Arduino-ESP32 core, just enable them).
+  - Add `-DUSE_SD_ASSETS=1` and pin defines for the TFT's SD slot (`SD_CS=5` on the common 2.8" ILI9341+XPT2046+SD shield; documented in a comment so you can adjust).
+- `include/config.h`
+  - New `SD_CS_PIN`, `MB_ASSET_ROOT "/mindbuddy"` constants and path helpers.
+- `src/ui/assets.h` / `src/ui/assets.cpp` (new)
+  - `assets::begin()` mounts the SD card, opens `theme.json`, and registers an LVGL filesystem driver (`'S'` drive) that maps `S:/…` → `SD.open("/mindbuddy/…")` — this is the officially supported way to stream LVGL images off disk with almost zero RAM cost.
+  - `assets::bg(Page)`, `assets::icon(const char*)`, `assets::avatar(state)` return `const char*` LVGL src strings such as `"S:/backgrounds/home.bin"`.
+  - Graceful fallback: if the card is missing or a file is absent, we log once and fall back to the current flat-color rendering so the board never bricks.
+- `src/ui/theme.h` (new) — parsed once from `theme.json` (bg, surface, primary/teal `#5eb8b0`, danger, text, muted). All page builders read colors from here instead of hardcoded hex.
+- `src/ui/ui.cpp` — full rewrite of the page builders to match the Figma layout:
+  - Each page uses `lv_image_create` with an `S:/backgrounds/<page>.bin` as the base layer.
+  - Buttons/tiles switch from bare `lv_button` + text to icon+label tiles using `assets::icon()`; the bottom nav on Home mirrors the Figma nav bar (Home, Brain, Chat, Music, Bell, SOS, Settings).
+  - Chat page gets bubbles, buddy avatar swapping on state, and the mic/send row from the Figma chat screen.
+  - Splash renders the SD-loaded logo instead of two `lv_label`s.
+  - We keep the existing link-bus hooks (`chatAppendUser/Ai`, `refresh_home`, `toast`) so `main.cpp` and the Pi protocol don't change.
+- `src/main.cpp` — call `assets::begin()` right before `ui::begin()`; leave button/SOS/UART logic alone.
 
-- Cloud `firmware/app.py` + local `firmware/app_local.py` + (legacy) `local-server/server.js`: in the action parser, if `play_music` / `play radio` is matched with **no** named station, immediately emit `[[music:random]]` instead of asking. The web AI server-fn `chatWithGuardianAi` already does this — extending parity.
-- New intent recogniser: phrases like "change station", "next station", "try another", "switch to <name>", "play <name>" while music is on → emit `[[music:<id-or-random>]]`. The firmware already supports re-tuning mid-playback; just need the server to keep emitting the directive instead of treating it as conversation.
+### 3. Docs
 
-## 4. Smarter transcription (Nigerian-aware)
+- `firmware/esp32-devmodule/README.md` gains an "SD card assets" section: how to format the card (FAT32, MBR), how to copy `sdcard/` to the root, and how to regenerate visuals with `tools/convert_assets.py`.
+- `firmware/esp32-devmodule/sdcard/README.txt` gives the same info to whoever holds only the card.
 
-Two layers, both server-side, no firmware change:
+## Technical notes
 
-- **Whisper prompt biasing**: pass an `initial_prompt` to Whisper containing common Nigerian terms ("Hausa, Yoruba, Igbo, Edo, Tiv, Ijaw, Fulani, Kanuri, jollof, suya, Naija, Lagos, Abuja, Wazobia, oga, abeg, wahala…"). Massively reduces "ausa"-style drops.
-- **LLM repair pass**: before sending the user message to the chat model, run a tiny `correct_transcription` call (same Llama model, low temp, 1–2 sentence system prompt) that fixes obvious phonetic ASR errors using Nigerian-English/pidgin context. Result is logged alongside the raw transcript so we can see what was changed.
+- LVGL 9's filesystem API: `lv_fs_drv_register` with open/close/read/seek callbacks backed by `SD.open()`. Images referenced as `"S:/…"` are decoded on demand so we never load a whole 240×320 frame into DRAM.
+- Images are LVGL binary format (RGB565, no alpha for backgrounds, RGB565A8 for icons). The `convert_assets.py` script wraps `LVGLImage.py` from the LVGL repo.
+- SD and TFT_eSPI share VSPI on this shield; TFT_eSPI's own SPI transactions already `beginTransaction`/`endTransaction`, and the Arduino `SD` library does too, so they coexist. We init the SD *after* the TFT so the SD library sees a working bus.
+- Fallback path guarantees that a missing/blank card still boots to a functional (if plain) UI — critical for bench debugging.
+- No behavioral change to link bus, state machine, Wi-Fi manager, SOS button, or Pi protocol.
 
-Applies to `firmware/app.py`, `firmware/app_local.py`, and `src/lib/guardian-ai.functions.ts`.
+## Deliverables checklist
 
-## 5. Buzzer chirp at end of every AI statement
-
-The plan in `.lovable/plan.md` item #9 specifies this but it isn't in the .ino yet. Add `playTone(1800, 80)` → 40 ms gap → `playTone(1400, 60)` right after the I2S drain in the TTS-playback path. Skipped only if `gInterrupt` was raised (interrupted replies don't chirp).
-
-## 6. Web app — siren for SOS, distinct chime for medication
-
-- `useAlarmRingtone` already plays a siren — verify it actually fires on the SOS realtime event in `PatientDashboard` / `CaregiverDashboard` (regression check) and surface a one-line warning in the UI if the browser has blocked audio autoplay.
-- New `useMedicationChime` hook: 3-note bell pattern (C6–E6–G6, sine wave, 600 ms total) repeating every 4 s for up to 60 s or until dismissed, plus a soft `navigator.vibrate([200,150,200])` pulse. Wired into the existing medication-due path in the dashboard.
-- Service worker `sw.js`: new `SHOW_MEDICATION_NOTIFICATION` handler with `tag: "medication-…"`, a softer `vibrate` pattern, and a "Mark taken" notification action.
-
----
-
-## Files I'll touch
-
-- `firmware/Healthco2Serial_S3_WakeWord/Healthco2Serial_S3_WakeWord.ino` — wake-word loop, 2-min idle timer, talk-button repurpose, end-of-reply chirp (items 2, 5).
-- `firmware/Healthco2Serial_S3_WakeWord/README.md` — ESP-SR install + wake-word model docs.
-- `firmware/app.py`, `firmware/app_local.py`, `local-server/server.js` — Whisper initial_prompt, LLM repair pass, default-random radio, re-tune intent (items 3, 4).
-- `firmware/local_server/scripts/pull-piper-voice.mjs` (new) + `firmware/local_server/package.json` postinstall + `firmware/local_server/README.md` — Nigerian Piper voice (item 1).
-- `src/lib/guardian-ai.functions.ts` — same prompt + repair pass for the web chat (item 4).
-- `src/hooks/use-medication-chime.ts` (new), `src/components/guardian/PatientDashboard.tsx`, `src/components/guardian/CaregiverDashboard.tsx`, `public/sw.js`, `src/lib/notifications.ts` — medication alert (item 6) + SOS audio regression check.
-
-## What I will NOT change
-
-- Database schema — none of these need new columns.
-- Existing radio station catalogue.
-- Existing Talk-button hardware wiring (only its software role changes).
-
-Tell me to proceed and I'll implement all six in one pass, or call out any items to drop/split.
+- New files: `src/ui/assets.{h,cpp}`, `src/ui/theme.{h,cpp}`, `sdcard/**`, `sdcard-src/**`, `tools/convert_assets.py`.
+- Rewritten: `src/ui/ui.cpp`, `platformio.ini`, `include/config.h`, `README.md`, `src/main.cpp` (one-liner).
+- Untouched: everything outside `firmware/esp32-devmodule/`.
