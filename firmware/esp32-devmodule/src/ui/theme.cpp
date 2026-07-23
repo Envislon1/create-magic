@@ -48,7 +48,7 @@ void load() {
     Serial.println(F("[theme] theme.json not on SD — using defaults"));
     return;
   }
-  StaticJsonDocument<1024> doc;
+  JsonDocument doc;
   DeserializationError err = deserializeJson(doc, f);
   f.close();
   if (err) {
