@@ -73,23 +73,30 @@ def encode_image(img: Image.Image) -> tuple[int, bytes]:
             i += 2
     return cf, bytes(data)
 
-def lvgl_header(cf: int, w: int, h: int, stride: int, data_len: int) -> bytes:
-    # LVGL v9 lv_image_header_t (packed to 12 bytes):
-    #   uint32_t magic=0x19  (LV_IMAGE_HEADER_MAGIC lower byte)
+def lvgl_header(cf: int, w: int, h: int, stride: int) -> bytes:
+    # LVGL v9 lv_image_header_t — 12 bytes, little-endian, bit-packed:
+    #   uint8_t  magic  = 0x19
     #   uint8_t  cf
-    #   uint8_t  flags
+    #   uint16_t flags
     #   uint16_t w
     #   uint16_t h
     #   uint16_t stride
-    #   uint16_t reserved_2
+    #   uint16_t reserved
     # Followed by the raw pixel payload. This matches LVGL's built-in
-    # binary decoder (see lv_bin_decoder.c).
-    magic = 0x19
-    flags = 0
-    return struct.pack("<IBBHHHH", magic, cf, flags, w, h, stride, 0) + \
-           struct.pack("<I", data_len)  # payload length trailer (used by
-                                        # LVGL's file-based decoder to
-                                        # know how much to read).
+    # binary decoder (lv_bin_decoder.c).
+    return struct.pack("<BBHHHHH", 0x19, cf, 0, w, h, stride, 0)
+
+def convert_one(src: Path) -> Path:
+    rel = src.relative_to(SRC_ROOT).with_suffix(".bin")
+    dst = DST_ROOT / rel
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    img = Image.open(src)
+    cf, payload = encode_image(img)
+    stride = img.size[0] * (2 if cf == CF_RGB565 else 3)
+    header = lvgl_header(cf, img.size[0], img.size[1], stride)
+    dst.write_bytes(header + payload)
+    print(f"  {rel}  ({img.size[0]}x{img.size[1]}, cf={cf})")
+    return dst
 
 def convert_one(src: Path) -> Path:
     rel = src.relative_to(SRC_ROOT).with_suffix(".bin")
