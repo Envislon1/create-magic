@@ -24,6 +24,18 @@
 #define TALK_BUTTON_PIN 27
 #define LONG_PRESS_MS   1200
 
+// ---- SD card slot on the TFT shield ----
+// The 2.8" ILI9341 + XPT2046 shield exposes an SD slot on the same VSPI bus
+// as the display (MISO=19, MOSI=23, SCK=18) with a dedicated chip-select on
+// GPIO5. Change SD_CS_PIN if your board wires it elsewhere. The MindBuddy
+// firmware uses this card to load backgrounds, icons, avatars and a theme
+// file from disk instead of packing them into ESP32 DRAM. See:
+//   firmware/esp32-devmodule/sdcard/README.txt
+#ifndef SD_CS_PIN
+  #define SD_CS_PIN 5
+#endif
+#define MB_ASSET_ROOT "/mindbuddy"
+
 // ---- App identity ----
 #define FW_VERSION "1.0.0-dev"
 #define DEFAULT_DEVICE_CODE "0000000000000000"
