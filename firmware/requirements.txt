@@ -1,0 +1,14 @@
+sentencepiece
+flask
+transformers
+soundfile
+scipy
+numpy
+psutil
+pydub
+gtts
+TTS==0.22.0
+librosa
+
+huggingface_hub
+python-dotenv

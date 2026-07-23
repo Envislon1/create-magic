@@ -1,0 +1,20 @@
+[Unit]
+Description=MindBuddy Raspberry Pi companion
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust User= and paths to match the account that owns the checkout.
+# Default assumes the recommended `mindbuddy` user on Raspberry Pi OS Trixie.
+User=mindbuddy
+WorkingDirectory=/home/mindbuddy/mindbuddy/firmware/raspi5
+Environment=PYTHONUNBUFFERED=1
+# Give the service access to audio + serial without extra sudo.
+SupplementaryGroups=audio dialout gpio
+ExecStart=/home/mindbuddy/mindbuddy/firmware/raspi5/.venv/bin/python -m mindbuddy.main
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

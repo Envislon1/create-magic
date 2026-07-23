@@ -1,0 +1,1 @@
+"""MindBuddy Raspberry Pi service."""

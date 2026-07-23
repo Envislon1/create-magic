@@ -1,0 +1,29 @@
+# Core
+pyserial>=3.5
+python-dotenv>=1.0
+requests>=2.32
+numpy>=1.26
+
+# Audio I/O
+sounddevice>=0.4.7
+soundfile>=0.12
+webrtcvad>=2.0.10
+
+# STT
+pywhispercpp>=1.2.0
+
+# Local LLM
+llama-cpp-python>=0.3.0
+
+# Local TTS
+# Kokoro is the default local voice — natural, expressive, still small
+# enough to run on a Pi 5. Piper stays as an optional secondary engine.
+kokoro-onnx>=0.3.0
+piper-tts>=1.2.0
+onnxruntime>=1.18
+
+# Cloud TTS fallback
+gTTS>=2.5
+
+# Nice-to-have
+colorama>=0.4.6

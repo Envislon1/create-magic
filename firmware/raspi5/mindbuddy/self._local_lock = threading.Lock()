@@ -1,0 +1,321 @@
+"""MindBuddy main orchestrator.
+
+Wires: audio ↔ STT ↔ hybrid LLM ↔ hybrid TTS ↔ Supabase ↔ LilyGo link.
+"""
+from __future__ import annotations
+import logging, threading, time, json, queue, signal, sys, re
+import argparse
+import sys
+from typing import List, Dict
+
+from .config import CFG
+from .link import PiLink
+from .audio_io import AudioIO
+from .stt_local import LocalSTT
+from .llm import HybridLLM
+from .tts import HybridTTS
+from .supabase_sync import SupabaseSync
+from .prompts import SYSTEM_PROMPT, build_mode_context
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)-6s %(levelname)-5s %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("main")
+
+ACTION_RE = re.compile(r"\{[^{}]*\"action\"\s*:[^{}]*\}", re.S)
+
+class MindBuddy:
+
+    def __init__(self, debug=False):
+        self.debug = debug
+
+        if not debug:
+            self.audio = AudioIO(CFG.alsa_in, CFG.alsa_out, CFG.sample_rate)
+            self.sync  = SupabaseSync(CFG.supabase_url, CFG.supabase_key,
+                                      CFG.device_code, self._on_supabase_state)
+            self.link  = PiLink(CFG.serial_port, CFG.serial_baud, self._on_lg_msg)
+        else:
+            self.audio = None
+            self.sync = None
+            self.link = None
+
+        self.stt   = LocalSTT(CFG.whisper_model, CFG.sample_rate)
+        self.llm   = HybridLLM(
+            CFG.local_llm_path,
+            CFG.local_llm_threads,
+            CFG.local_llm_ctx,
+            CFG.groq_api_key,
+            CFG.groq_model,
+        )
+        self.tts   = HybridTTS(
+            CFG.piper_voice,
+            CFG.openai_api_key,
+            CFG.openai_tts_model,
+            CFG.openai_tts_voice,
+        )
+
+        self.mode = CFG.default_mode
+        self.history: List[Dict] = []
+        self.in_call = False
+        self.online = False
+        self.cloud_pref = True
+        self.stop = threading.Event()
+        self.turn_q: queue.Queue[str] = queue.Queue()
+
+    # --------------- lifecycle ---------------
+    def run(self):
+        self.audio.start_capture(); self.audio.set_volume(CFG.default_volume)
+        self.link.start(); self.sync.start()
+        signal.signal(signal.SIGINT, lambda *_: self.stop.set())
+        signal.signal(signal.SIGTERM, lambda *_: self.stop.set())
+        threading.Thread(target=self._wake_loop,  daemon=True).start()
+        threading.Thread(target=self._turn_loop,  daemon=True).start()
+        self._push_state()
+        log.info("ready")
+        while not self.stop.is_set(): time.sleep(0.5)
+        self.link.stop(); self.audio.stop_capture()
+
+    # --------------- link ---------------
+    def _on_lg_msg(self, m: dict):
+        t = m.get("type")
+        if t == "ping":              self.link.send({"type": "pong"})
+        elif t == "boot":            log.info("lg boot: %s", m)
+        elif t == "mode_set":        self._set_mode(m.get("mode", "ANXIETY"))
+        elif t == "sound_set":       pass  # audio.mute could hook here
+        elif t == "voice_set":       self.tts.set_voice(m.get("voice", "female"))
+        elif t == "volume_set":      self.audio.set_volume(int(m.get("volume", 70)))
+        elif t == "cloud_toggle":    self._set_cloud(bool(m.get("cloud", True)))
+        elif t == "net_status":      self._set_online(bool(m.get("online", False)))
+        elif t == "call_incoming" or t == "call_answered": self._enter_call()
+        elif t == "call_ended":      self._leave_call()
+        elif t == "sos_trigger":     self._handle_sos(m.get("note", ""))
+        elif t == "wake":            self.turn_q.put("__wake__")
+        elif t == "text_prompt":     self.turn_q.put(m.get("text", ""))
+        elif t == "music_cmd":       log.info("music cmd %s (TODO: player)", m)
+
+    # --------------- supabase ---------------
+    def _on_supabase_state(self, s: dict):
+        mode = s.get("mode")
+        if mode and mode != self.mode: self._set_mode(mode)
+        vol = s.get("speaker_volume")
+        if isinstance(vol, int): self.audio.set_volume(vol)
+        voice = s.get("preferred_voice")
+        if voice: self.tts.set_voice(voice)
+        # forward useful bits to LilyGo
+        self.link.send({"type": "meds", "items": s.get("meds", [])})
+        self.link.send({"type": "sos_state", "active": bool(s.get("sos_active"))})
+
+    # --------------- helpers ---------------
+    def _set_mode(self, m: str):
+        self.mode = (m or "ANXIETY").upper()
+        self.history.clear()
+        self.link.send({"type": "mode", "mode": self.mode})
+        self.sync.push({"mode": self.mode})
+
+    def _set_cloud(self, cloud: bool):
+        self.cloud_pref = cloud
+        self.llm.set_cloud_allowed(cloud)
+        self.tts.set_cloud_allowed(cloud)
+        self._push_state()
+
+    def _set_online(self, online: bool):
+        self.online = online; self._push_state()
+
+    def _push_state(self):
+        self.link.send({"type": "state", "listening": False, "thinking": False,
+                        "speaking": False,
+                        "backend": "cloud" if (self.online and self.cloud_pref and self.llm.has_cloud()) else "local"})
+
+    def _enter_call(self):
+        if self.in_call: return
+        self.in_call = True
+        log.info("call started — releasing audio")
+        self.audio.stop_playback(); self.audio.pause(); self.audio.stop_capture()
+
+    def _leave_call(self):
+        if not self.in_call: return
+        self.in_call = False
+        log.info("call ended — reclaiming audio")
+        self.audio.start_capture(); self.audio.resume()
+
+    def _handle_sos(self, note: str):
+        log.warning("SOS: %s", note)
+        self.sync.sos(note or "SOS from device")
+        self.audio.beep(1000, 200); self.audio.beep(700, 200); self.audio.beep(1000, 300)
+
+    # --------------- wake ---------------
+    def _wake_loop(self):
+        """Rolling 1.5 s window; if wake phrase detected, hand off to turn loop."""
+        window_s = 1.5; frames_per_window = int(CFG.sample_rate * window_s)
+        buf = []
+        while not self.stop.is_set():
+            if self.in_call: time.sleep(0.2); continue
+            chunk = self.audio.read_seconds(0.3)
+            if chunk.size == 0: continue
+            buf.append(chunk)
+            if sum(len(b) for b in buf) < frames_per_window: continue
+            import numpy as np
+            window = np.concatenate(buf)[-frames_per_window:]; buf = [window[-frames_per_window//2:]]
+            text = self.stt.transcribe(window).lower()
+            if CFG.wake_phrase and CFG.wake_phrase in text:
+                log.info("wake matched: %r", text)
+                self.audio.beep(880, 90)
+                self.turn_q.put("__wake__")
+
+    # --------------- turn ---------------
+    def _turn_loop(self):
+        while not self.stop.is_set():
+            try: item = self.turn_q.get(timeout=0.5)
+            except queue.Empty: continue
+            if self.in_call: continue
+
+            if item == "__wake__":
+                # capture until end-of-utterance
+                self.link.send({"type": "state", "listening": True, "thinking": False, "speaking": False})
+                utt = self.stt.wait_for_speech(self._frame_iter())
+                text = self.stt.transcribe(utt).strip() if utt.size else ""
+            else:
+                text = item.strip()
+
+            if not text:
+                self._push_state(); continue
+
+            self.link.send({"type": "chat_user", "text": text})
+            self.link.send({"type": "state", "listening": False, "thinking": True, "speaking": False,
+                            "backend": "cloud" if (self.online and self.cloud_pref and self.llm.has_cloud()) else "local"})
+
+            self.history.append({"role": "user", "content": text})
+            self.history = self.history[-10:]
+            messages = [
+                {"role": "system", "content": SYSTEM_PROMPT + "\n" + build_mode_context(self.mode)},
+                *self.history,
+            ]
+            prefer_cloud = self.online and self.cloud_pref
+            try: reply = self.llm.chat(messages, prefer_cloud=prefer_cloud)
+            except Exception as e:
+                log.exception("llm error: %s", e); reply = "I'm having trouble thinking right now."
+
+            reply, action = self._extract_action(reply)
+            self.history.append({"role": "assistant", "content": reply})
+            self.link.send({"type": "chat_ai_final", "text": reply})
+
+            self.link.send({"type": "state", "listening": False, "thinking": False, "speaking": True,
+                            "backend": "cloud" if prefer_cloud and self.tts.cloud_allowed and self.tts.openai_key else "local"})
+            try:
+                pcm, sr = self.tts.synth(reply, prefer_cloud=prefer_cloud)
+                if pcm.size: self.audio.play_pcm(pcm, sr, blocking=True)
+            except Exception as e: log.warning("tts error: %s", e)
+
+            if action: self._act(action)
+            self._push_state()
+
+    def _frame_iter(self):
+        """Yield 30 ms mono frames until the audio queue is empty for 2 s."""
+        import numpy as np
+        idle_deadline = time.time() + 2.0
+        while time.time() < idle_deadline and not self.in_call:
+            chunk = self.audio.read_seconds(0.03)
+            if chunk.size:
+                idle_deadline = time.time() + 2.0
+                yield chunk
+
+    def _extract_action(self, reply: str):
+        m = ACTION_RE.search(reply)
+        if not m: return reply, None
+        try: action = json.loads(m.group(0))
+        except Exception: return reply, None
+        return (reply[: m.start()] + reply[m.end():]).strip(), action
+
+    def _act(self, a: dict):
+        kind = a.get("action")
+        log.info("action %s: %s", kind, a)
+        if kind == "trigger_sos":
+            self._handle_sos("triggered by voice")
+        elif kind == "set_medication":
+            self.sync.push({"med": {"hour": int(a.get("hour", 20)),
+                                    "minute": int(a.get("minute", 0)),
+                                    "enabled": bool(a.get("enabled", True))}})
+        elif kind == "play_music":
+            self.link.send({"type": "music_state", "playing": True,
+                            "title": a.get("query", ""), "artist": ""})
+        # extend as new actions land
+	
+    def run_debug(self):
+        print("\n==============================")
+        print(" MindBuddy Debug Mode")
+        print("==============================")
+        print("Type 'exit' to quit.\n")
+
+        while True:
+            try:
+                text = input("You: ").strip()
+
+                if not text:
+                    continue
+
+                if text.lower() in ("exit", "quit"):
+                    print("Goodbye.")
+                    break
+
+                self.history.append({"role": "user", "content": text})
+                self.history = self.history[-10:]
+
+                messages = [
+                    {
+                        "role": "system",
+                        "content": SYSTEM_PROMPT + "\n" + build_mode_context(self.mode),
+                    },
+                    *self.history,
+                ]
+
+                prefer_cloud = self.online and self.cloud_pref
+
+                reply = self.llm.chat(messages, prefer_cloud=prefer_cloud)
+
+                reply, action = self._extract_action(reply)
+
+                self.history.append(
+                    {
+                        "role": "assistant",
+                        "content": reply,
+                    }
+                )
+
+                print("\nMindBuddy:", reply)
+
+                if action:
+                    print("\n[Action]")
+                    print(action)
+
+            except KeyboardInterrupt:
+                print("\nExiting debug mode.")
+                break
+
+            except Exception as e:
+                print("\nError:", e)
+                
+import argparse
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Run without audio and hardware"
+    )
+
+    args = parser.parse_args()
+
+    app = MindBuddy(debug=args.debug)
+
+    if args.debug:
+        app.run_debug()
+    else:
+        app.run()
+
+
+if __name__ == "__main__":
+    main()
