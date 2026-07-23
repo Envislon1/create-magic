@@ -1,0 +1,19 @@
+{
+  "_comment": "MindBuddy TFT theme tokens. Edit hex values freely; the firmware reloads this file on every boot. Colors mirror the MindBuddy TFT Screen Pages Figma design.",
+  "colors": {
+    "bg":       "#0e1420",
+    "surface":  "#161d2b",
+    "surface2": "#1c2536",
+    "primary":  "#5eb8b0",
+    "primaryDim":"#3f8781",
+    "accent":   "#7bd3ca",
+    "danger":   "#e6604a",
+    "warn":     "#f2a44a",
+    "ok":       "#4ec38a",
+    "text":     "#e8edf5",
+    "muted":    "#6b7a99",
+    "userBubble": "#2e8b57",
+    "aiBubble":   "#1c2536"
+  },
+  "splash": { "brand": "MindBuddy", "tagline": "your calm companion" }
+}
