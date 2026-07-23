@@ -44,6 +44,47 @@ Avoid wiring TFT control lines to ESP32 boot-strapping pins: **GPIO0, GPIO2,
 GPIO4, GPIO5, GPIO12, GPIO15**. Some TFT modules pull CS/RST/DC/BL high or low
 at reset, which can stop the ESP32 from booting or suppress boot serial logs.
 
+> **Exception:** the SD-card slot's CS on the standard 2.8" ILI9341+XPT2046+SD
+> shield sits on **GPIO5**. That's a strapping pin, but only the CS line is on
+> it and the card leaves CS floating at boot, so it doesn't affect strap
+> state. If you moved the SD's CS to a different pin, override it with
+> `-DSD_CS_PIN=<pin>` in `platformio.ini`.
+
+## SD card assets (backgrounds, icons, avatars, theme)
+
+The firmware loads its polished visuals from an SD card in the TFT shield's
+built-in slot instead of packing them into ESP32 DRAM. This is what makes
+the on-board UI match the "MindBuddy TFT Screen Pages" Figma design without
+crowding out Wi-Fi / WiFiManager.
+
+**Preparing the card (any 512 MB – 32 GB card works; 8 GB is fine):**
+
+1. Format the card as **FAT32**, MBR partition table, 32 KB allocation unit.
+2. Copy the entire `sdcard/mindbuddy/` folder from this repo to the **root**
+   of the card. You should end up with `/mindbuddy/theme.json`,
+   `/mindbuddy/backgrounds/…`, `/mindbuddy/icons/…`, etc.
+3. Slide the card into the shield and boot the board.
+
+The splash screen prints `SD:ok` if the card was found, `SD:off` otherwise.
+Anything missing on the card silently falls back to flat-color rendering, so
+you can add assets one folder at a time.
+
+**Editing the theme:** open `sdcard/mindbuddy/theme.json` in any editor,
+change the hex values, save. The palette is re-read on every boot.
+
+**Regenerating art:** drop replacement PNGs into `sdcard-src/<subfolder>/`
+using the sizing table in `sdcard-src/README.md`, then run:
+
+```
+python3 tools/convert_assets.py
+```
+
+That rewrites the `.bin` files under `sdcard/mindbuddy/`. Copy the folder to
+the card again.
+
+Full expected file list and sizes are in `sdcard/README.txt`.
+
+
 ## Build
 
 ```
